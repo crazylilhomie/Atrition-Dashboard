@@ -17,37 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 st.set_page_config(page_title="EA Attrition Dashboard", layout="wide")
-import streamlit as st
-import pandas as pd
-import numpy as np
 
-# Example: replace this with your actual confusion matrices
-# confs could be a single matrix, a list, or a dictionary
-# Example single matrix:
-# confs = np.array([[50, 5], [3, 42]])
-# Example list of matrices:
-# confs = [cm_dt, cm_rf, cm_gb]
-# Example dictionary of matrices:
-# confs = {"Decision Tree": cm_dt, "Random Forest": cm_rf, "Gradient Boosted": cm_gb}
-
-# Ensure confs is defined above this snippet in your code
-
-# Make confs iterable and display
-if confs is None:
-    st.error("No confusion matrices found!")
-elif isinstance(confs, dict):
-    for name, cm in confs.items():
-        st.write(f"**{name} Confusion Matrix**")
-        st.dataframe(pd.DataFrame(cm))
-elif isinstance(confs, (list, tuple, np.ndarray)):
-    # If single matrix, wrap in list
-    if isinstance(confs, np.ndarray) and confs.ndim == 2:
-        confs = [confs]
-    for i, cm in enumerate(confs):
-        st.write(f"**Confusion Matrix {i+1}**")
-        st.dataframe(pd.DataFrame(cm))
-else:
-    st.error(f"Unsupported type for confusion matrices: {type(confs)}")
 @st.cache_data
 def load_data(path="/mnt/data/EA.csv"):
     df = pd.read_csv(path)
