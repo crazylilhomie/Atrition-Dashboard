@@ -272,7 +272,7 @@ with tab2:
         elif isinstance(confs, (list, tuple, np.ndarray)):
     # Wrap single 2D array in list
             if isinstance(confs, np.ndarray) and confs.ndim == 2:
-          confs = [confs]
+              confs = [confs]
           for i, cm in enumerate(confs):
             st.write(f"**Confusion Matrix {i+1}**")
             st.dataframe(pd.DataFrame(cm).round(4))
