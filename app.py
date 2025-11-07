@@ -268,7 +268,9 @@ with tab2:
         st.dataframe(res_df.round(4))
         st.subheader("Confusion Matrices (grayscale)")
         cols = st.columns(3)
-        for i, (name, cm) in enumerate(confs.items()):
+        for i, cm in enumerate(confs):
+            st.write(f"Confusion Matrix {i}")
+            st.write(cm)
             fig = plot_confusion_matrix_bw(cm)
             cols[i].pyplot(fig)
         st.subheader("ROC Curves")
