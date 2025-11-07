@@ -40,23 +40,33 @@ def load_data():
             st.stop()
     return df
 
-from sklearn.preprocessing import OneHotEncoder
 import inspect
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+import pandas as pd
+
+# -----------------------------
+# Preprocessor (robust version)
+# -----------------------------
 def get_preprocessor(df):
-    from sklearn.compose import ColumnTransformer
-    from sklearn.pipeline import Pipeline
-    from sklearn.impute import SimpleImputer
-    from sklearn.preprocessing import StandardScaler
-
+    """Builds preprocessing pipeline that adapts to sklearn version and skips constant columns."""
+    # Identify numeric and categorical columns
     num_cols = df.select_dtypes(include=['number']).columns.tolist()
-    cat_cols = df.select_dtypes(exclude=['number']).columns.tolist()
+    cat_cols = [c for c in df.select_dtypes(exclude=['number']).columns if df[c].nunique() > 1]
 
-    # ✅ Dynamically handle the version difference
+    # Handle OneHotEncoder version compatibility
     if 'sparse_output' in inspect.signature(OneHotEncoder).parameters:
         onehot = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     else:
         onehot = OneHotEncoder(handle_unknown='ignore', sparse=False)
 
+    # Pipelines for numeric and categorical data
     num_trans = Pipeline([
         ('imputer', SimpleImputer(strategy='median')),
         ('scaler', StandardScaler())
@@ -73,47 +83,65 @@ def get_preprocessor(df):
 
     return preprocessor, num_cols, cat_cols
 
-def train_models(df, target='Attrition', cv_splits=5):
-    y = df[target].astype(str)
-    unique_labels = y.unique().tolist()
-    label_map = {v:i for i,v in enumerate(unique_labels)}
-    y_enc = y.map(label_map).values
-    X = df.drop(columns=[target])
+
+# -----------------------------
+# Model Training (robust version)
+# -----------------------------
+def train_models(df):
+    """Trains 3 classification models with cross-validation and returns metrics table."""
+    # Clean column names
+    df.columns = df.columns.str.strip()
+
+    # Ensure Attrition column exists
+    if "Attrition" not in df.columns:
+        raise ValueError("The dataset must contain an 'Attrition' column.")
+
+    # Separate target and features
+    y = df["Attrition"]
+    if y.dtype == "object":
+        y = y.str.strip().str.lower().map({"yes": 1, "no": 0})
+    y = y.fillna(0).astype(int)
+    X = df.drop(columns=["Attrition"])
+
+    # Build preprocessor
     preprocessor, num_cols, cat_cols = get_preprocessor(df)
+
+    # Models
     models = {
-        'DecisionTree': DecisionTreeClassifier(random_state=42),
-        'RandomForest': RandomForestClassifier(n_estimators=200, random_state=42),
-        'GradientBoosting': GradientBoostingClassifier(n_estimators=200, random_state=42)
+        "Decision Tree": DecisionTreeClassifier(random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=200, random_state=42),
+        "Gradient Boosting": GradientBoostingClassifier(n_estimators=200, random_state=42)
     }
+
+    # Cross-validation setup
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scoring = {
+        "accuracy": make_scorer(accuracy_score),
+        "precision": make_scorer(precision_score),
+        "recall": make_scorer(recall_score),
+        "f1": make_scorer(f1_score),
+        "roc_auc": make_scorer(roc_auc_score)
+    }
+
+    # Run models
     results = []
-    confs = {}
-    rocs = {}
-    for name, clf in models.items():
-        pipe = Pipeline([('preproc', preprocessor), ('clf', clf)])
-        cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=42)
-        scoring = ['accuracy','precision','recall','f1','roc_auc']
-        cv_res = cross_validate(pipe, X, y_enc, cv=cv, scoring=scoring, return_train_score=True, n_jobs=1)
-        row = {
-            'model': name,
-            'train_accuracy': np.mean(cv_res['train_accuracy']),
-            'test_accuracy': np.mean(cv_res['test_accuracy']),
-            'train_precision': np.mean(cv_res['train_precision']),
-            'test_precision': np.mean(cv_res['test_precision']),
-            'train_recall': np.mean(cv_res['train_recall']),
-            'test_recall': np.mean(cv_res['test_recall']),
-            'train_f1': np.mean(cv_res['train_f1']),
-            'test_f1': np.mean(cv_res['test_f1']),
-            'test_auc': np.mean(cv_res['test_roc_auc'])
-        }
-        results.append(row)
-        y_pred = cross_val_predict(pipe, X, y_enc, cv=cv, method='predict', n_jobs=1)
-        y_proba = cross_val_predict(pipe, X, y_enc, cv=cv, method='predict_proba', n_jobs=1)[:,1]
-        confs[name] = confusion_matrix(y_enc, y_pred)
-        fpr, tpr, _ = roc_curve(y_enc, y_proba)
-        rocs[name] = {'fpr': fpr, 'tpr': tpr, 'auc': roc_auc_score(y_enc, y_proba)}
+    confs, rocs = {}, {}
+    for name, model in models.items():
+        pipe = Pipeline([("preproc", preprocessor), ("clf", model)])
+        cv_res = cross_validate(pipe, X, y, cv=cv, scoring=scoring,
+                                return_train_score=True, n_jobs=1, error_score='raise')
+        results.append({
+            "Model": name,
+            "Train Accuracy": cv_res["train_accuracy"].mean(),
+            "Test Accuracy": cv_res["test_accuracy"].mean(),
+            "Precision": cv_res["test_precision"].mean(),
+            "Recall": cv_res["test_recall"].mean(),
+            "F1": cv_res["test_f1"].mean(),
+            "AUC": cv_res["test_roc_auc"].mean()
+        })
+
     res_df = pd.DataFrame(results)
     return res_df, confs, rocs, preprocessor
-
 def plot_confusion_matrix_bw(cm, labels=['Stayed (0)','Left (1)']):
     fig, ax = plt.subplots(figsize=(4,3))
     ax.imshow(cm, cmap='Greys', interpolation='nearest')
