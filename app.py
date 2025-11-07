@@ -9,7 +9,10 @@ from sklearn.impute import SimpleImputer
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import StratifiedKFold, cross_validate, cross_val_predict
-from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import (
+    confusion_matrix, roc_curve, roc_auc_score,
+    accuracy_score, precision_score, recall_score, f1_score, make_scorer
+)
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
@@ -100,10 +103,11 @@ def train_models(df):
         cv_res = cross_validate(pipe, X, y, cv=cv, scoring=scoring, return_train_score=True, n_jobs=1, error_score='raise')
         y_pred = cross_val_predict(pipe, X, y, cv=cv)
 
+        # Confusion matrix
         cm = confusion_matrix(y, y_pred)
         confs[name] = cm
 
-        # Compute ROC AUC
+        # ROC curve
         pipe.fit(X, y)
         y_proba = pipe.predict_proba(X)[:,1]
         fpr, tpr, _ = roc_curve(y, y_proba)
