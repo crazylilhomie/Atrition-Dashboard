@@ -23,6 +23,23 @@ def load_data(path="/mnt/data/EA.csv"):
     df = pd.read_csv(path)
     return df
 
+
+import os
+
+@st.cache_data
+def load_data():
+    path = "EA.csv"
+    if os.path.exists(path):
+        df = pd.read_csv(path)
+    else:
+        uploaded = st.file_uploader("Upload your EA.csv dataset", type=["csv"])
+        if uploaded is not None:
+            df = pd.read_csv(uploaded)
+        else:
+            st.warning("Please upload EA.csv to proceed.")
+            st.stop()
+    return df
+
 def get_preprocessor(df):
     X = df.copy()
     num_cols = X.select_dtypes(include=['number']).columns.tolist()
