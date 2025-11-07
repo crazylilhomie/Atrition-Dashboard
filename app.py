@@ -89,6 +89,16 @@ def get_preprocessor(df):
 # -----------------------------
 def train_models(df):
     """Trains 3 classification models with cross-validation and returns metrics table."""
+    import inspect
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+    from sklearn.compose import ColumnTransformer
+    from sklearn.pipeline import Pipeline
+    from sklearn.impute import SimpleImputer
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.model_selection import StratifiedKFold, cross_validate
+    from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+
     # Clean column names
     df.columns = df.columns.str.strip()
 
@@ -103,8 +113,11 @@ def train_models(df):
     y = y.fillna(0).astype(int)
     X = df.drop(columns=["Attrition"])
 
-    # Build preprocessor
-    preprocessor, num_cols, cat_cols = get_preprocessor(df)
+    # Handle OneHotEncoder version compatibility
+    if 'sparse_output' in inspect.signature(OneHotEncoder).parameters:
+        onehot = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+    else:
+        onehot = OneHotEncoder(handle_unknown='ignore', sparse=False)
 
     # Models
     models = {
@@ -123,13 +136,39 @@ def train_models(df):
         "roc_auc": make_scorer(roc_auc_score)
     }
 
-    # Run models
     results = []
-    confs, rocs = {}, {}
+
     for name, model in models.items():
+        # Define preprocessor fresh for each fold
+        num_cols = X.select_dtypes(include=['number']).columns.tolist()
+        cat_cols = [c for c in X.select_dtypes(exclude=['number']).columns if X[c].nunique() > 1]
+
+        num_trans = Pipeline([
+            ('imputer', SimpleImputer(strategy='median')),
+            ('scaler', StandardScaler())
+        ])
+        cat_trans = Pipeline([
+            ('imputer', SimpleImputer(strategy='constant', fill_value='__MISSING__')),
+            ('onehot', onehot)
+        ])
+
+        preprocessor = ColumnTransformer([
+            ('num', num_trans, num_cols),
+            ('cat', cat_trans, cat_cols)
+        ])
+
         pipe = Pipeline([("preproc", preprocessor), ("clf", model)])
-        cv_res = cross_validate(pipe, X, y, cv=cv, scoring=scoring,
-                                return_train_score=True, n_jobs=1, error_score='raise')
+
+        # Cross-validation safely
+        cv_res = cross_validate(
+            pipe, X, y,
+            cv=cv,
+            scoring=scoring,
+            return_train_score=True,
+            n_jobs=1,
+            error_score='raise'
+        )
+
         results.append({
             "Model": name,
             "Train Accuracy": cv_res["train_accuracy"].mean(),
@@ -141,7 +180,8 @@ def train_models(df):
         })
 
     res_df = pd.DataFrame(results)
-    return res_df, confs, rocs, preprocessor
+    return res_df, None, None, None
+  
 def plot_confusion_matrix_bw(cm, labels=['Stayed (0)','Left (1)']):
     fig, ax = plt.subplots(figsize=(4,3))
     ax.imshow(cm, cmap='Greys', interpolation='nearest')
