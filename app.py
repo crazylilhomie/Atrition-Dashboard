@@ -26,18 +26,13 @@ def load_data(path="/mnt/data/EA.csv"):
 
 import os
 
-@st.cache_data
 def load_data():
-    path = "EA.csv"
-    if os.path.exists(path):
-        df = pd.read_csv(path)
+    # Move file uploader OUTSIDE cached function
+    uploaded = st.file_uploader("Upload your EA.csv dataset", type=["csv"])
+    if uploaded is not None:
+        df = pd.read_csv(uploaded)
     else:
-        uploaded = st.file_uploader("Upload your EA.csv dataset", type=["csv"])
-        if uploaded is not None:
-            df = pd.read_csv(uploaded)
-        else:
-            st.warning("Please upload EA.csv to proceed.")
-            st.stop()
+        df = pd.read_csv("/mnt/data/EA.csv")
     return df
 
 import inspect
@@ -268,11 +263,21 @@ with tab2:
         st.dataframe(res_df.round(4))
         st.subheader("Confusion Matrices (grayscale)")
         cols = st.columns(3)
-        for i, cm in enumerate(confs):
-            st.write(f"Confusion Matrix {i}")
-            st.write(cm)
-            fig = plot_confusion_matrix_bw(cm)
-            cols[i].pyplot(fig)
+        if confs is None:
+          st.warning("No confusion matrices available.")
+        elif isinstance(confs, dict):
+          for name, cm in confs.items():
+            st.write(f"**{name} Confusion Matrix**")
+            st.dataframe(pd.DataFrame(cm).round(4))
+        elif isinstance(confs, (list, tuple, np.ndarray)):
+    # Wrap single 2D array in list
+          if isinstance(confs, np.ndarray) and confs.ndim == 2:
+        confs = [confs]
+          for i, cm in enumerate(confs):
+            st.write(f"**Confusion Matrix {i+1}**")
+            st.dataframe(pd.DataFrame(cm).round(4))
+        else:
+          st.error(f"Unsupported type for confusion matrices: {type(confs)}")
         st.subheader("ROC Curves")
         fig = go.Figure()
         for name, info in rocs.items():
