@@ -40,17 +40,37 @@ def load_data():
             st.stop()
     return df
 
+from sklearn.preprocessing import OneHotEncoder
+import inspect
 def get_preprocessor(df):
-    X = df.copy()
-    num_cols = X.select_dtypes(include=['number']).columns.tolist()
-    cat_cols = X.select_dtypes(include=['object','category','bool']).columns.tolist()
-    if 'Attrition' in num_cols: num_cols.remove('Attrition')
-    if 'Attrition' in cat_cols: cat_cols.remove('Attrition')
-    numeric_transformer = Pipeline([('imputer', SimpleImputer(strategy='median')), ('scaler', StandardScaler())])
-    categorical_transformer = Pipeline([('imputer', SimpleImputer(strategy='constant', fill_value='__MISSING__')),
-                                       ('onehot', OneHotEncoder(handle_unknown='ignore', sparse=False))])
-    preprocessor = ColumnTransformer(transformers=[('num', numeric_transformer, num_cols),
-                                                   ('cat', categorical_transformer, cat_cols)], remainder='drop')
+    from sklearn.compose import ColumnTransformer
+    from sklearn.pipeline import Pipeline
+    from sklearn.impute import SimpleImputer
+    from sklearn.preprocessing import StandardScaler
+
+    num_cols = df.select_dtypes(include=['number']).columns.tolist()
+    cat_cols = df.select_dtypes(exclude=['number']).columns.tolist()
+
+    # ✅ Dynamically handle the version difference
+    if 'sparse_output' in inspect.signature(OneHotEncoder).parameters:
+        onehot = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+    else:
+        onehot = OneHotEncoder(handle_unknown='ignore', sparse=False)
+
+    num_trans = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())
+    ])
+    cat_trans = Pipeline([
+        ('imputer', SimpleImputer(strategy='constant', fill_value='__MISSING__')),
+        ('onehot', onehot)
+    ])
+
+    preprocessor = ColumnTransformer([
+        ('num', num_trans, num_cols),
+        ('cat', cat_trans, cat_cols)
+    ])
+
     return preprocessor, num_cols, cat_cols
 
 def train_models(df, target='Attrition', cv_splits=5):
