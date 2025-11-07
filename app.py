@@ -265,7 +265,7 @@ with tab2:
     if st.session_state['model_results'] is not None:
         res_df, confs, rocs = st.session_state['model_results']
         st.subheader("Performance summary (averaged across folds)")
-        st.dataframe(res_df.style.format("{:.4f}"))
+        st.dataframe(res_df.round(4))
         st.subheader("Confusion Matrices (grayscale)")
         cols = st.columns(3)
         for i, (name, cm) in enumerate(confs.items()):
